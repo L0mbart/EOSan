@@ -1,17 +1,23 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "EOS",
+    "slug": "eos",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "id.jlm.eos",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Foto grafik traffic untuk lampiran laporan EOS.",
+        "NSCameraUsageDescription": "Kamera untuk memotret grafik traffic."
+      }
     },
     "android": {
+      "package": "id.jlm.eos",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#102033",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -20,6 +26,17 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Foto grafik traffic untuk lampiran laporan EOS.",
+          "cameraPermission": "Kamera untuk memotret grafik traffic."
+        }
+      ]
+    ]
   }
 }

@@ -3,6 +3,9 @@
 # dependencies
 node_modules/
 
+# OCR language data downloaded at runtime
+eng.traineddata
+
 # Expo
 .expo/
 dist/

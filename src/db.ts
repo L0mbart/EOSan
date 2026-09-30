@@ -1,0 +1,194 @@
+import type { SQLiteDatabase } from 'expo-sqlite';
+import { Platform } from 'react-native';
+
+import { findClient } from './clients';
+import { sampleBawasluReport } from './seed';
+import type { Report } from './types';
+
+const WEB_KEY = 'eos.store.v1';
+
+type WebStore = {
+  reports: Report[];
+  settings: Record<string, string>;
+};
+
+function emptyStore(): WebStore {
+  return { reports: [], settings: {} };
+}
+
+function readWeb(): WebStore {
+  const raw = globalThis.localStorage?.getItem(WEB_KEY);
+  if (!raw) return emptyStore();
+  try {
+    const parsed = JSON.parse(raw) as Partial<WebStore>;
+    return {
+      reports: Array.isArray(parsed.reports) ? parsed.reports : [],
+      settings: parsed.settings ?? {},
+    };
+  } catch {
+    return emptyStore();
+  }
+}
+
+function writeWeb(store: WebStore): void {
+  globalThis.localStorage.setItem(WEB_KEY, JSON.stringify(store));
+}
+
+function ensureWeb(): WebStore {
+  const current = readWeb();
+  if (current.settings.seeded === '1') return current;
+  const next: WebStore = {
+    reports: current.reports.length > 0 ? current.reports : [sampleBawasluReport()],
+    settings: { ...current.settings, seeded: '1' },
+  };
+  writeWeb(next);
+  return next;
+}
+
+let databasePromise: Promise<SQLiteDatabase> | null = null;
+
+async function openDatabase(): Promise<SQLiteDatabase> {
+  const SQLite = await import('expo-sqlite');
+  const db = await SQLite.openDatabaseAsync('eos.db');
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS reports (
+      id TEXT PRIMARY KEY NOT NULL,
+      client_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      status TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL
+    );
+  `);
+  const seeded = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['seeded']);
+  if (!seeded) {
+    const existing = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM reports');
+    if (!existing || existing.count === 0) {
+      await writeSqliteReport(db, sampleBawasluReport());
+    }
+    await db.runAsync('INSERT INTO settings (key, value) VALUES (?, ?)', ['seeded', '1']);
+  }
+  return db;
+}
+
+function database(): Promise<SQLiteDatabase> {
+  if (!databasePromise) {
+    databasePromise = openDatabase().catch((error: unknown) => {
+      databasePromise = null;
+      throw error;
+    });
+  }
+  return databasePromise;
+}
+
+export async function initDb(): Promise<void> {
+  if (Platform.OS === 'web') {
+    ensureWeb();
+    return;
+  }
+  await database();
+}
+
+async function writeSqliteReport(db: SQLiteDatabase, report: Report): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO reports (id, client_id, date, status, updated_at, payload)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       client_id = excluded.client_id,
+       date = excluded.date,
+       status = excluded.status,
+       updated_at = excluded.updated_at,
+       payload = excluded.payload`,
+    [report.id, report.clientId, report.date, report.status, report.updatedAt, JSON.stringify(report)],
+  );
+}
+
+function sortReports(reports: Report[]): Report[] {
+  return [...reports].sort((left, right) => {
+    const byDate = right.date.localeCompare(left.date);
+    if (byDate !== 0) return byDate;
+    return right.updatedAt.localeCompare(left.updatedAt);
+  });
+}
+
+export async function listReports(): Promise<Report[]> {
+  if (Platform.OS === 'web') return sortReports(ensureWeb().reports);
+  const db = await database();
+  const rows = await db.getAllAsync<{ payload: string }>(
+    'SELECT payload FROM reports ORDER BY date DESC, updated_at DESC',
+  );
+  return rows.map((row) => JSON.parse(row.payload) as Report);
+}
+
+export async function getReport(id: string): Promise<Report | null> {
+  if (Platform.OS === 'web') return ensureWeb().reports.find((report) => report.id === id) ?? null;
+  const db = await database();
+  const row = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM reports WHERE id = ?', [id]);
+  return row ? (JSON.parse(row.payload) as Report) : null;
+}
+
+export async function saveReport(report: Report): Promise<void> {
+  const next = { ...report, updatedAt: new Date().toISOString() };
+  if (Platform.OS === 'web') {
+    const store = ensureWeb();
+    const reports = store.reports.filter((item) => item.id !== next.id);
+    reports.push(next);
+    writeWeb({ ...store, reports });
+    return;
+  }
+  const db = await database();
+  await writeSqliteReport(db, next);
+}
+
+export async function deleteReport(id: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    const store = ensureWeb();
+    writeWeb({ ...store, reports: store.reports.filter((report) => report.id !== id) });
+    return;
+  }
+  const db = await database();
+  await db.runAsync('DELETE FROM reports WHERE id = ?', [id]);
+}
+
+export async function uniqueCode(base: string, selfId: string): Promise<string> {
+  const reports = await listReports();
+  const used = new Set(reports.filter((report) => report.id !== selfId).map((report) => report.code));
+  if (!used.has(base)) return base;
+  let suffix = 2;
+  while (used.has(`${base}-${suffix}`)) suffix += 1;
+  return `${base}-${suffix}`;
+}
+
+export function codeFor(clientId: string, date: string): string {
+  const client = findClient(clientId);
+  const compact = date.replaceAll('-', '').slice(2);
+  return `${client.codePrefix}-${compact}`;
+}
+
+export async function getEngineerName(): Promise<string> {
+  if (Platform.OS === 'web') return ensureWeb().settings.engineerName ?? '';
+  const db = await database();
+  const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', [
+    'engineerName',
+  ]);
+  return row?.value ?? '';
+}
+
+export async function setEngineerName(name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (Platform.OS === 'web') {
+    const store = ensureWeb();
+    writeWeb({ ...store, settings: { ...store.settings, engineerName: trimmed } });
+    return;
+  }
+  const db = await database();
+  await db.runAsync(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    ['engineerName', trimmed],
+  );
+}
