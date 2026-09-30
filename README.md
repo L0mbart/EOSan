@@ -6,7 +6,7 @@ Daily report app for Engineer On Site (EOS) at PT Jala Lintas Media. One codebas
 
 - Sign in, then create, edit, lock, and reopen a daily report.
 - Record shift time, location, activities, and field notes.
-- Upload one or more MRTG or Cacti screenshots. The app reads the link name, date, time window, and traffic, then fills the matching slot. The image is not stored or shown after reading.
+- Upload one or more MRTG or Cacti screenshots. The app reads the link name, date, time window, and traffic, then fills the matching slot. The image is not shown on screen. It is kept with that slot and printed in the PDF.
 - Review download and upload current, average, and max. A value is flagged when the average is higher than the max.
 - Save the report in the app. Sharing to a WhatsApp group is optional: a switch opens the share sheet so the engineer can pick the group.
 - Generate a PDF that includes the traffic summary, including max, and the full traffic tables.

@@ -178,10 +178,15 @@ export function EditorScreen({
                 }
               : slot,
           );
+          const linkId = reading.linkId ?? '';
+          const windowId = reading.windowId ?? '';
+          const photos = current.photos.filter((photo) => photo.linkId !== linkId || photo.windowId !== windowId);
+          photos.push({ linkId, windowId, base64: capture.base64, mime: capture.mime || 'image/jpeg' });
           return {
             ...current,
             date: reading.date ?? current.date,
-            slots: { ...current.slots, [reading.linkId ?? '']: slots },
+            slots: { ...current.slots, [linkId]: slots },
+            photos,
           };
         });
       } else if (reading.date) {

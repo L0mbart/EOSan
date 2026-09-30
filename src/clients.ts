@@ -2,7 +2,7 @@ import type { Client, LinkTone, ReportStatus } from './types';
 
 export const company = {
   name: 'PT. Jala Lintas Media',
-  address: 'Jl. Raya Mayor Oking Jaya Atmaja No.89, Cibinong, Bogor',
+  address: 'Jl. Raya Mayor Oking Jaya Atmaja No.89, Ciriung, Kec. Cibinong, Kabupaten Bogor, Jawa Barat 16918',
 };
 
 export const bawaslu: Client = {
