@@ -8,7 +8,7 @@ import { formatLongDate } from '../dates';
 import { formatMetric, lastFilledSlot, linkIssueCount } from '../metrics';
 import { shareReportPdf } from '../share';
 import { colors } from '../theme';
-import type { Report } from '../types';
+import type { Report, Side } from '../types';
 
 export function DetailScreen({
   reportId,
@@ -109,16 +109,11 @@ export function DetailScreen({
                 </View>
                 <Pill label={toneLabel(link.tone)} tone={link.tone} />
               </View>
-              <View style={styles.metrics}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.note}>Download</Text>
-                  <Text style={styles.figure}>{slot ? formatMetric(slot.download.current) : '—'}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.note}>Upload</Text>
-                  <Text style={styles.figure}>{slot ? formatMetric(slot.upload.current) : '—'}</Text>
-                </View>
-              </View>
+              {slot ? (
+                <Text style={styles.note}>Jendela {client.windows.find((item) => item.id === slot.windowId)?.label}</Text>
+              ) : null}
+              <TrafficLine label="Download" side={slot?.download} />
+              <TrafficLine label="Upload" side={slot?.upload} />
               {issues > 0 ? <Text style={styles.warn}>{issues} angka perlu dicek di detail PDF</Text> : null}
             </View>
           );
@@ -128,9 +123,9 @@ export function DetailScreen({
         <View style={styles.card}>
           <Text style={styles.note}>{report.notes.trim() || 'Tidak ada catatan.'}</Text>
         </View>
-        <Pressable onPress={remove}>
-          <Text style={styles.delete}>Hapus laporan</Text>
-        </Pressable>
+        <View style={styles.deleteWrap}>
+          <PrimaryButton label="Hapus laporan" danger onPress={remove} />
+        </View>
       </ScrollView>
       <View style={styles.footer}>
         <PrimaryButton label="Ubah" secondary onPress={() => onEdit(report.id)} disabled={busy} />
@@ -141,21 +136,43 @@ export function DetailScreen({
   );
 }
 
+function TrafficLine({ label, side }: { label: string; side?: Side }) {
+  return (
+    <View style={{ marginTop: 12 }}>
+      <Text style={styles.activityTitle}>{label}</Text>
+      <View style={styles.metrics}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.note}>Saat ini</Text>
+          <Text style={styles.figure}>{side ? formatMetric(side.current) : '—'}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.note}>Rata-rata</Text>
+          <Text style={styles.figure}>{side ? formatMetric(side.avg) : '—'}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.note}>Maks</Text>
+          <Text style={styles.figure}>{side ? formatMetric(side.max) : '—'}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.paper },
-  body: { padding: 16, paddingBottom: 28 },
+  body: { padding: 20, paddingBottom: 28, width: '100%', maxWidth: 920, alignSelf: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   shift: { color: colors.muted, flex: 1, textAlign: 'right' },
-  engineer: { color: colors.ink, fontSize: 18, fontWeight: '700', marginTop: 10, marginBottom: 8 },
-  section: { color: colors.teal, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginTop: 14, marginBottom: 8 },
-  card: { backgroundColor: colors.white, borderRadius: 12, padding: 14, marginBottom: 10 },
-  activity: { flexDirection: 'row', gap: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.line },
-  when: { width: 92, color: colors.teal, fontWeight: '700' },
+  engineer: { color: colors.ink, fontSize: 20, fontWeight: '700', marginTop: 12, marginBottom: 8 },
+  section: { color: colors.muted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginTop: 16, marginBottom: 8 },
+  card: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 14, marginBottom: 10 },
+  activity: { flexDirection: 'row', gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.line },
+  when: { width: 92, color: colors.ink, fontWeight: '700' },
   activityTitle: { color: colors.ink, fontWeight: '700' },
   note: { color: colors.muted, marginTop: 2, lineHeight: 18 },
-  metrics: { flexDirection: 'row', marginTop: 12 },
-  figure: { color: colors.ink, fontSize: 18, fontWeight: '700', marginTop: 2 },
-  warn: { color: colors.amber, marginTop: 8, fontWeight: '700' },
-  delete: { color: colors.danger, textAlign: 'center', marginTop: 12, fontWeight: '700' },
-  footer: { flexDirection: 'row', padding: 16, paddingTop: 0 },
+  metrics: { flexDirection: 'row', marginTop: 8, gap: 8 },
+  figure: { color: colors.ink, fontSize: 16, fontWeight: '700', marginTop: 2 },
+  warn: { color: colors.amber, marginTop: 10, fontWeight: '700' },
+  deleteWrap: { flexDirection: 'row', marginTop: 8 },
+  footer: { flexDirection: 'row', padding: 16, paddingTop: 0, width: '100%', maxWidth: 920, alignSelf: 'center' },
 });

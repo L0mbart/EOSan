@@ -6,6 +6,9 @@ node_modules/
 # OCR language data downloaded at runtime
 eng.traineddata
 
+# local account secrets
+secret/
+
 # Expo
 .expo/
 dist/

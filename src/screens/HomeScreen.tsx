@@ -1,24 +1,30 @@
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { statusLabel } from '../clients';
-import { Pill, PrimaryButton, ScreenHeader } from '../components';
+import { findClient, statusLabel } from '../clients';
+import { Pill, PrimaryButton, ScreenHeader, TextButton } from '../components';
 import { formatLongDate } from '../dates';
 import { filledWindowCount, reportIssueCount } from '../metrics';
 import { colors } from '../theme';
-import type { Report } from '../types';
+import type { Report, SessionUser } from '../types';
 
 export function HomeScreen({
   reports,
   engineerName,
+  user,
   onCreate,
   onOpen,
+  onUsers,
+  onLogout,
   onSaveName,
 }: {
   reports: Report[];
   engineerName: string;
+  user: SessionUser;
   onCreate: () => void;
   onOpen: (id: string) => void;
+  onUsers: () => void;
+  onLogout: () => void;
   onSaveName: (name: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -33,15 +39,38 @@ export function HomeScreen({
     onCreate();
   }
 
+  const flagged = reports.filter((report) => reportIssueCount(report) > 0).length;
+  const drafts = reports.filter((report) => report.status === 'draft').length;
+
   return (
     <View style={styles.screen}>
       <ScreenHeader
-        kicker="PT. JALA LINTAS MEDIA"
+        kicker="Laporan lapangan"
         title="EOS"
-        subtitle="Bawaslu RI · laporan harian"
-        right={engineerName ? engineerName.split(' ')[0] : 'Nama'}
+        subtitle={user.displayName}
+        trailing={
+          <View style={styles.trailing}>
+            {user.role === 'admin' ? <TextButton label="Pengguna" onPress={onUsers} /> : null}
+            <TextButton label="Keluar" onPress={onLogout} />
+          </View>
+        }
       />
       <ScrollView contentContainerStyle={styles.body}>
+        <View style={styles.stats}>
+          <View style={styles.stat}>
+            <Text style={styles.statValue}>{reports.length}</Text>
+            <Text style={styles.statLabel}>Laporan</Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={styles.statValue}>{drafts}</Text>
+            <Text style={styles.statLabel}>Draf</Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={styles.statValue}>{flagged}</Text>
+            <Text style={styles.statLabel}>Perlu dicek</Text>
+          </View>
+        </View>
+
         <Pressable
           style={styles.nameRow}
           onPress={() => {
@@ -49,8 +78,11 @@ export function HomeScreen({
             setOpen(true);
           }}
         >
-          <Text style={styles.nameLabel}>Engineer on site</Text>
-          <Text style={styles.nameValue}>{engineerName || 'Ketuk untuk mengisi nama'}</Text>
+          <View>
+            <Text style={styles.nameLabel}>Engineer on site</Text>
+            <Text style={styles.nameValue}>{engineerName || 'Ketuk untuk mengisi nama'}</Text>
+          </View>
+          <Text style={styles.editName}>Ubah</Text>
         </Pressable>
 
         <Text style={styles.section}>Laporan</Text>
@@ -61,10 +93,14 @@ export function HomeScreen({
         ) : (
           reports.map((report) => {
             const issues = reportIssueCount(report);
+            const client = findClient(report.clientId);
             return (
               <Pressable key={report.id} style={styles.card} onPress={() => onOpen(report.id)}>
                 <View style={styles.cardTop}>
-                  <Text style={styles.date}>{formatLongDate(report.date)}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.date}>{formatLongDate(report.date)}</Text>
+                    <Text style={styles.client}>{client.name}</Text>
+                  </View>
                   <Pill
                     label={issues > 0 ? 'Perlu dicek' : statusLabel(report.status)}
                     tone={issues > 0 ? 'amber' : report.status === 'draft' ? 'muted' : 'ok'}
@@ -113,18 +149,35 @@ export function HomeScreen({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.paper },
-  body: { padding: 16, paddingBottom: 24 },
-  nameRow: { backgroundColor: colors.white, borderRadius: 12, padding: 14, marginBottom: 18 },
-  nameLabel: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+  trailing: { flexDirection: 'row', alignItems: 'center' },
+  body: { padding: 20, paddingBottom: 24, width: '100%', maxWidth: 920, alignSelf: 'center' },
+  stats: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  stat: { flex: 1, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 12 },
+  statValue: { color: colors.ink, fontSize: 22, fontWeight: '700' },
+  statLabel: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  nameRow: {
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  nameLabel: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.4 },
   nameValue: { color: colors.ink, fontSize: 16, marginTop: 4, fontWeight: '600' },
-  section: { color: colors.teal, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 8 },
-  card: { backgroundColor: colors.white, borderRadius: 12, padding: 14, marginBottom: 10 },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  date: { color: colors.ink, fontWeight: '700', fontSize: 15, flex: 1 },
-  code: { color: colors.teal, marginTop: 8, fontWeight: '700' },
+  editName: { color: colors.teal, fontWeight: '700' },
+  section: { color: colors.muted, fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 8 },
+  card: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 14, marginBottom: 8 },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+  date: { color: colors.ink, fontWeight: '700', fontSize: 15 },
+  client: { color: colors.muted, marginTop: 2, fontSize: 13 },
+  code: { color: colors.ink, marginTop: 10, fontWeight: '700', letterSpacing: 0.2 },
   meta: { color: colors.muted, marginTop: 4, fontSize: 13 },
   empty: { color: colors.muted, lineHeight: 20 },
-  footer: { padding: 16, paddingTop: 0 },
+  footer: { flexDirection: 'row', padding: 16, paddingTop: 0, width: '100%', maxWidth: 920, alignSelf: 'center' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(16,32,51,0.45)', justifyContent: 'center', padding: 24 },
   modalCard: { backgroundColor: colors.paper, borderRadius: 16, padding: 16 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: colors.ink, marginBottom: 12 },

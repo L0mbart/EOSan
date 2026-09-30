@@ -41,18 +41,22 @@ export function buildReportHtml(report: Report): string {
     .map((link) => {
       const slot = lastFilledSlot(report, link.id);
       const issues = linkIssueCount(report, link.id);
-      const download = slot ? formatMetric(slot.download.current) : '—';
-      const upload = slot ? formatMetric(slot.upload.current) : '—';
-      const downloadSub = slot ? `avg ${formatMetric(slot.download.avg)} · max ${formatMetric(slot.download.max)}` : 'Belum diisi';
-      const uploadSub = slot ? `avg ${formatMetric(slot.upload.avg)} · max ${formatMetric(slot.upload.max)}` : '';
+      const windowLabel = slot
+        ? client.windows.find((item) => item.id === slot.windowId)?.label ?? ''
+        : '';
       const flag = issues > 0 ? `<div class="flag">${issues} angka perlu dicek</div>` : '';
       return `<div class="card">
         <div class="card-top">
-          <div><strong>${esc(link.name)}</strong><div class="muted">${esc(link.role)}</div></div>
+          <div><strong>${esc(link.name)}</strong><div class="muted">${esc(link.role)}${windowLabel ? ` · ${esc(windowLabel)}` : ''}</div></div>
           <span class="pill ${link.tone}">${toneLabel(link.tone)}</span>
         </div>
-        <div class="pair"><div><div class="muted">Download</div><div class="big">${esc(download)}</div><div class="muted">${esc(downloadSub)}</div></div>
-        <div><div class="muted">Upload</div><div class="big">${esc(upload)}</div><div class="muted">${esc(uploadSub)}</div></div></div>
+        <table class="summary">
+          <thead><tr><th></th><th>Saat ini</th><th>Rata-rata</th><th>Maks</th></tr></thead>
+          <tbody>
+            <tr><td>Download</td><td class="big">${esc(slot ? formatMetric(slot.download.current) : '—')}</td><td>${esc(slot ? formatMetric(slot.download.avg) : '—')}</td><td class="big">${esc(slot ? formatMetric(slot.download.max) : '—')}</td></tr>
+            <tr><td>Upload</td><td class="big">${esc(slot ? formatMetric(slot.upload.current) : '—')}</td><td>${esc(slot ? formatMetric(slot.upload.avg) : '—')}</td><td class="big">${esc(slot ? formatMetric(slot.upload.max) : '—')}</td></tr>
+          </tbody>
+        </table>
         ${flag}
       </div>`;
     })
@@ -103,7 +107,10 @@ export function buildReportHtml(report: Report): string {
   .grid { width: 100%; }
   .card { border: 1px solid #E2E8EC; border-radius: 8px; padding: 10px; margin: 0 0 8px; }
   .card-top, .pair { display: flex; justify-content: space-between; gap: 8px; }
-  .big { font-size: 14px; font-weight: 700; margin: 2px 0; }
+  .big { font-size: 13px; font-weight: 700; }
+  table.summary { margin-top: 8px; }
+  table.summary th { background: transparent; padding-bottom: 2px; }
+  table.summary td { border-bottom: none; padding-top: 2px; }
   .pill { border-radius: 12px; padding: 2px 8px; font-size: 10px; font-weight: 700; height: fit-content; }
   .ok { background: #E5F6ED; color: #0C7A4B; }
   .backup { background: #E6F4F2; color: #147A74; }

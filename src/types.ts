@@ -34,6 +34,24 @@ export type Photo = {
 
 export type ReportStatus = 'draft' | 'saved' | 'shared';
 
+export type UserRole = 'admin' | 'engineer';
+
+export type Account = {
+  id: string;
+  username: string;
+  displayName: string;
+  role: UserRole;
+  salt: string;
+  passwordHash: string;
+};
+
+export type SessionUser = {
+  id: string;
+  username: string;
+  displayName: string;
+  role: UserRole;
+};
+
 export type Report = {
   id: string;
   code: string;

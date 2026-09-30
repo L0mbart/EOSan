@@ -1,19 +1,31 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { Platform } from 'react-native';
 
+import { adminAccount } from './admin-account';
 import { findClient } from './clients';
+import { hashPassword, randomSalt } from './password';
 import { sampleBawasluReport } from './seed';
-import type { Report } from './types';
+import type { Account, Report, SessionUser, UserRole } from './types';
 
 const WEB_KEY = 'eos.store.v1';
 
 type WebStore = {
   reports: Report[];
   settings: Record<string, string>;
+  users: Account[];
 };
 
 function emptyStore(): WebStore {
-  return { reports: [], settings: {} };
+  return { reports: [], settings: {}, users: [] };
+}
+
+function toSession(account: Account): SessionUser {
+  return {
+    id: account.id,
+    username: account.username,
+    displayName: account.displayName,
+    role: account.role,
+  };
 }
 
 function readWeb(): WebStore {
@@ -24,6 +36,7 @@ function readWeb(): WebStore {
     return {
       reports: Array.isArray(parsed.reports) ? parsed.reports : [],
       settings: parsed.settings ?? {},
+      users: Array.isArray(parsed.users) ? parsed.users : [],
     };
   } catch {
     return emptyStore();
@@ -34,15 +47,19 @@ function writeWeb(store: WebStore): void {
   globalThis.localStorage.setItem(WEB_KEY, JSON.stringify(store));
 }
 
-function ensureWeb(): WebStore {
-  const current = readWeb();
-  if (current.settings.seeded === '1') return current;
+function withAccounts(store: WebStore): WebStore {
+  const seeded = store.settings.seeded === '1';
   const next: WebStore = {
-    reports: current.reports.length > 0 ? current.reports : [sampleBawasluReport()],
-    settings: { ...current.settings, seeded: '1' },
+    reports: !seeded && store.reports.length === 0 ? [sampleBawasluReport()] : store.reports,
+    users: store.users.length > 0 ? store.users : [{ ...adminAccount }],
+    settings: seeded ? store.settings : { ...store.settings, seeded: '1' },
   };
-  writeWeb(next);
+  if (JSON.stringify(next) !== JSON.stringify(store)) writeWeb(next);
   return next;
+}
+
+function ensureWeb(): WebStore {
+  return withAccounts(readWeb());
 }
 
 let databasePromise: Promise<SQLiteDatabase> | null = null;
@@ -63,7 +80,16 @@ async function openDatabase(): Promise<SQLiteDatabase> {
       key TEXT PRIMARY KEY NOT NULL,
       value TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY NOT NULL,
+      username TEXT NOT NULL UNIQUE,
+      payload TEXT NOT NULL
+    );
   `);
+  const userCount = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM users');
+  if (!userCount || userCount.count === 0) {
+    await writeSqliteUser(db, { ...adminAccount });
+  }
   const seeded = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['seeded']);
   if (!seeded) {
     const existing = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM reports');
@@ -91,6 +117,14 @@ export async function initDb(): Promise<void> {
     return;
   }
   await database();
+}
+
+async function writeSqliteUser(db: SQLiteDatabase, account: Account): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO users (id, username, payload) VALUES (?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET username = excluded.username, payload = excluded.payload`,
+    [account.id, account.username, JSON.stringify(account)],
+  );
 }
 
 async function writeSqliteReport(db: SQLiteDatabase, report: Report): Promise<void> {
@@ -176,6 +210,92 @@ export async function getEngineerName(): Promise<string> {
     'engineerName',
   ]);
   return row?.value ?? '';
+}
+
+async function readUsers(): Promise<Account[]> {
+  if (Platform.OS === 'web') return ensureWeb().users;
+  const db = await database();
+  const rows = await db.getAllAsync<{ payload: string }>('SELECT payload FROM users ORDER BY username');
+  return rows.map((row) => JSON.parse(row.payload) as Account);
+}
+
+async function readSetting(key: string): Promise<string> {
+  if (Platform.OS === 'web') return ensureWeb().settings[key] ?? '';
+  const db = await database();
+  const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', [key]);
+  return row?.value ?? '';
+}
+
+async function writeSetting(key: string, value: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    const store = ensureWeb();
+    writeWeb({ ...store, settings: { ...store.settings, [key]: value } });
+    return;
+  }
+  const db = await database();
+  await db.runAsync(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    [key, value],
+  );
+}
+
+export async function listUsers(): Promise<SessionUser[]> {
+  const users = await readUsers();
+  return users.map(toSession).sort((left, right) => left.username.localeCompare(right.username));
+}
+
+export async function login(username: string, password: string): Promise<SessionUser | null> {
+  const name = username.trim().toLowerCase();
+  const account = (await readUsers()).find((user) => user.username === name);
+  if (!account || hashPassword(account.salt, password) !== account.passwordHash) return null;
+  await writeSetting('sessionUserId', account.id);
+  return toSession(account);
+}
+
+export async function currentSession(): Promise<SessionUser | null> {
+  const id = await readSetting('sessionUserId');
+  if (!id) return null;
+  const account = (await readUsers()).find((user) => user.id === id);
+  return account ? toSession(account) : null;
+}
+
+export async function logout(): Promise<void> {
+  await writeSetting('sessionUserId', '');
+}
+
+export async function createUser(input: {
+  username: string;
+  displayName: string;
+  password: string;
+  role: UserRole;
+}): Promise<SessionUser> {
+  const username = input.username.trim().toLowerCase();
+  const displayName = input.displayName.trim();
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+    throw new Error('Nama pengguna 3–32 karakter: huruf, angka, titik, atau garis.');
+  }
+  if (input.password.length < 8) throw new Error('Kata sandi minimal 8 karakter.');
+  if (!displayName) throw new Error('Isi nama tampilan.');
+  const users = await readUsers();
+  if (users.some((user) => user.username === username)) throw new Error('Nama pengguna sudah dipakai.');
+  const salt = randomSalt();
+  const account: Account = {
+    id: `user-${Date.now().toString(36)}`,
+    username,
+    displayName,
+    role: input.role,
+    salt,
+    passwordHash: hashPassword(salt, input.password),
+  };
+  if (Platform.OS === 'web') {
+    const store = ensureWeb();
+    writeWeb({ ...store, users: [...store.users, account] });
+  } else {
+    const db = await database();
+    await writeSqliteUser(db, account);
+  }
+  return toSession(account);
 }
 
 export async function setEngineerName(name: string): Promise<void> {
