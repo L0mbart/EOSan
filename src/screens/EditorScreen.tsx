@@ -13,9 +13,10 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 
+import { compactCapture } from '../capture';
 import { clients, findClient } from '../clients';
 import { Field, PrimaryButton, ScreenHeader } from '../components';
-import { codeFor, getReport, saveReport, setEngineerName, uniqueCode } from '../db';
+import { codeFor, getReport, loadRegistry, saveReport, setEngineerName, uniqueCode } from '../db';
 import { isIsoDate } from '../dates';
 import { linkIssueCount, metricInconsistent, reportIssueCount, slotHasValue, toggleUnit } from '../metrics';
 import { mergeSide, parseGraphText } from '../ocr';
@@ -27,11 +28,13 @@ import type { Metric, Report, Side } from '../types';
 
 export function EditorScreen({
   reportId,
+  contractId,
   engineerName,
   onBack,
   onSaved,
 }: {
   reportId?: string;
+  contractId?: string;
   engineerName: string;
   onBack: () => void;
   onSaved: (id: string) => void;
@@ -47,7 +50,22 @@ export function EditorScreen({
     let cancelled = false;
     async function load() {
       const existing = reportId ? await getReport(reportId) : null;
-      const next = existing ?? createBlankReport(clients[0], engineerName);
+      let next = existing;
+      if (!next) {
+        const registry = await loadRegistry();
+        const contract = registry.contracts.find((item) => item.id === contractId);
+        const customer = registry.customers.find((item) => item.id === contract?.customerId);
+        const client = findClient(customer?.templateId ?? clients[0].id);
+        const person = registry.personnel.find((item) => item.id === contract?.personnelIds[0]);
+        next = createBlankReport(client, person?.name || engineerName, contract
+          ? {
+              contractId: contract.id,
+              contractCode: contract.code,
+              personnelId: person?.id,
+              location: contract.location || customer?.sites[0]?.address,
+            }
+          : undefined);
+      }
       if (cancelled) return;
       setReport(next);
       const firstLink = findClient(next.clientId).links[0]?.id;
@@ -60,7 +78,7 @@ export function EditorScreen({
     };
     // engineerName is only the initial value for a new report.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportId]);
+  }, [reportId, contractId]);
 
   function leave() {
     if (!report || JSON.stringify(report) === initial.current) {
@@ -167,21 +185,26 @@ export function EditorScreen({
       notes.push(reading.note);
       if (reading.linkId && reading.windowId) {
         shownLink = reading.linkId;
+        const stored = await compactCapture(capture.base64, capture.mime || 'image/jpeg').catch(() => ({
+          base64: capture.base64,
+          mime: capture.mime || 'image/jpeg',
+        }));
         setReport((current) => {
           if (!current) return current;
-          const slots = (current.slots[reading.linkId ?? ''] ?? []).map((slot) =>
-            slot.windowId === reading.windowId
+          const linkId = reading.linkId ?? '';
+          const windowId = reading.windowId ?? '';
+          const slots = (current.slots[linkId] ?? []).map((slot) =>
+            slot.windowId === windowId
               ? {
                   ...slot,
                   download: mergeSide(slot.download, reading.download),
                   upload: mergeSide(slot.upload, reading.upload),
+                  image: stored,
                 }
               : slot,
           );
-          const linkId = reading.linkId ?? '';
-          const windowId = reading.windowId ?? '';
-          const photos = current.photos.filter((photo) => photo.linkId !== linkId || photo.windowId !== windowId);
-          photos.push({ linkId, windowId, base64: capture.base64, mime: capture.mime || 'image/jpeg' });
+          const photos = (current.photos ?? []).filter((photo) => photo.linkId !== linkId || photo.windowId !== windowId);
+          photos.push({ linkId, windowId, base64: stored.base64, mime: stored.mime });
           return {
             ...current,
             date: reading.date ?? current.date,

@@ -4,8 +4,9 @@ import { Platform } from 'react-native';
 import { adminAccount } from './admin-account';
 import { findClient } from './clients';
 import { hashPassword, randomSalt } from './password';
+import { defaultRegistry, hydrateRegistry } from './registry';
 import { sampleBawasluReport } from './seed';
-import type { Account, Report, SessionUser, UserRole } from './types';
+import type { Account, Contract, Customer, Personnel, Registry, Report, SessionUser, UserRole } from './types';
 
 const WEB_KEY = 'eos.store.v1';
 
@@ -13,10 +14,13 @@ type WebStore = {
   reports: Report[];
   settings: Record<string, string>;
   users: Account[];
+  customers: Customer[];
+  personnel: Personnel[];
+  contracts: Contract[];
 };
 
 function emptyStore(): WebStore {
-  return { reports: [], settings: {}, users: [] };
+  return { reports: [], settings: {}, users: [], customers: [], personnel: [], contracts: [] };
 }
 
 function toSession(account: Account): SessionUser {
@@ -37,6 +41,9 @@ function readWeb(): WebStore {
       reports: Array.isArray(parsed.reports) ? parsed.reports : [],
       settings: parsed.settings ?? {},
       users: Array.isArray(parsed.users) ? parsed.users : [],
+      customers: Array.isArray(parsed.customers) ? parsed.customers : [],
+      personnel: Array.isArray(parsed.personnel) ? parsed.personnel : [],
+      contracts: Array.isArray(parsed.contracts) ? parsed.contracts : [],
     };
   } catch {
     return emptyStore();
@@ -50,6 +57,7 @@ function writeWeb(store: WebStore): void {
 function withAccounts(store: WebStore): WebStore {
   const seeded = store.settings.seeded === '1';
   const next: WebStore = {
+    ...store,
     reports: !seeded && store.reports.length === 0 ? [sampleBawasluReport()] : store.reports,
     users: store.users.length > 0 ? store.users : [{ ...adminAccount }],
     settings: seeded ? store.settings : { ...store.settings, seeded: '1' },
@@ -59,7 +67,23 @@ function withAccounts(store: WebStore): WebStore {
 }
 
 function ensureWeb(): WebStore {
-  return withAccounts(readWeb());
+  const withUsers = withAccounts(readWeb());
+  if (withUsers.settings.registry === '1') return withUsers;
+  const seeded = defaultRegistry();
+  const next: WebStore = {
+    ...withUsers,
+    reports: withUsers.reports.map((report) =>
+      report.clientId === 'bawaslu' && !report.contractId
+        ? { ...report, contractId: 'contract-bawaslu-2026', contractCode: 'EOS-BW-2026', personnelId: 'personnel-rakan' }
+        : report,
+    ),
+    customers: withUsers.customers.length > 0 ? withUsers.customers : seeded.customers,
+    personnel: withUsers.personnel.length > 0 ? withUsers.personnel : seeded.personnel,
+    contracts: withUsers.contracts.length > 0 ? withUsers.contracts : seeded.contracts,
+    settings: { ...withUsers.settings, registry: '1' },
+  };
+  writeWeb(next);
+  return next;
 }
 
 let databasePromise: Promise<SQLiteDatabase> | null = null;
@@ -97,6 +121,11 @@ async function openDatabase(): Promise<SQLiteDatabase> {
       await writeSqliteReport(db, sampleBawasluReport());
     }
     await db.runAsync('INSERT INTO settings (key, value) VALUES (?, ?)', ['seeded', '1']);
+  }
+  const registry = await db.getFirstAsync<{ value: string }>('SELECT value FROM settings WHERE key = ?', ['registry']);
+  if (!registry) {
+    await db.runAsync('INSERT INTO settings (key, value) VALUES (?, ?)', ['ops.registry', JSON.stringify(defaultRegistry())]);
+    await db.runAsync('INSERT INTO settings (key, value) VALUES (?, ?)', ['registry', '1']);
   }
   return db;
 }
@@ -296,6 +325,74 @@ export async function createUser(input: {
     await writeSqliteUser(db, account);
   }
   return toSession(account);
+}
+
+export async function loadRegistry(): Promise<Registry> {
+  if (Platform.OS === 'web') {
+    const store = ensureWeb();
+    return hydrateRegistry(store);
+  }
+  const raw = await readSetting('ops.registry');
+  if (!raw) return defaultRegistry();
+  try {
+    return hydrateRegistry(JSON.parse(raw) as Partial<Registry>);
+  } catch {
+    return defaultRegistry();
+  }
+}
+
+async function storeRegistry(registry: Registry): Promise<void> {
+  if (Platform.OS === 'web') {
+    const store = ensureWeb();
+    writeWeb({ ...store, ...registry, settings: { ...store.settings, registry: '1' } });
+    return;
+  }
+  await writeSetting('ops.registry', JSON.stringify(registry));
+}
+
+export async function saveCustomer(customer: Customer): Promise<void> {
+  const registry = await loadRegistry();
+  const customers = registry.customers.filter((item) => item.id !== customer.id);
+  customers.push(customer);
+  await storeRegistry(hydrateRegistry({ ...registry, customers }));
+}
+
+export async function deleteCustomer(id: string): Promise<void> {
+  const registry = await loadRegistry();
+  if (registry.personnel.some((person) => person.customerId === id)) {
+    throw new Error('assigned');
+  }
+  await storeRegistry(hydrateRegistry({
+    ...registry,
+    customers: registry.customers.filter((item) => item.id !== id),
+  }));
+}
+
+export async function savePersonnel(person: Personnel): Promise<void> {
+  const registry = await loadRegistry();
+  const personnel = registry.personnel.filter((item) => item.id !== person.id);
+  personnel.push(person);
+  await storeRegistry(hydrateRegistry({ ...registry, personnel }));
+}
+
+export async function deletePersonnel(id: string): Promise<void> {
+  const registry = await loadRegistry();
+  await storeRegistry(hydrateRegistry({
+    ...registry,
+    personnel: registry.personnel.filter((item) => item.id !== id),
+  }));
+}
+
+export async function saveContract(contract: Contract): Promise<void> {
+  const registry = await loadRegistry();
+  const contracts = registry.contracts.filter((item) => item.id !== contract.id);
+  contracts.push(contract);
+  await storeRegistry({ ...registry, contracts });
+}
+
+export async function deleteContract(id: string): Promise<void> {
+  const registry = await loadRegistry();
+  await storeRegistry({ ...registry, contracts: registry.contracts.filter((item) => item.id !== id) });
 }
 
 export async function setEngineerName(name: string): Promise<void> {

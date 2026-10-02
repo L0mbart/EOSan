@@ -1,7 +1,7 @@
 import { company, findClient } from './clients';
 import { formatLongDate } from './dates';
 import { formatMetric, metricInconsistent, slotHasValue } from './metrics';
-import type { Metric, Photo, Report, Side, TrafficSlot } from './types';
+import type { Metric, Photo, Report, Side, SlotImage, TrafficSlot } from './types';
 
 function esc(value: string): string {
   return value
@@ -21,13 +21,13 @@ function sideRow(label: string, side: Side): string {
 }
 
 function photoFor(report: Report, linkId: string, windowId: string): Photo | undefined {
-  return report.photos.find((photo) => photo.linkId === linkId && photo.windowId === windowId && photo.base64);
+  return (report.photos ?? []).find((photo) => photo.linkId === linkId && photo.windowId === windowId && photo.base64);
 }
 
-function graph(photo: Photo | undefined): string {
-  if (!photo) return '';
-  const mime = photo.mime.startsWith('image/') ? photo.mime : 'image/jpeg';
-  return `<img alt="" src="data:${mime};base64,${photo.base64}" />`;
+function graph(image: SlotImage | undefined): string {
+  if (!image?.base64) return '';
+  const mime = image.mime.startsWith('image/') ? image.mime : 'image/jpeg';
+  return `<img alt="Grafik traffic" src="data:${mime};base64,${image.base64}" />`;
 }
 
 export function buildReportHtml(report: Report): string {
@@ -49,8 +49,8 @@ export function buildReportHtml(report: Report): string {
       const blocks = client.links
         .map((link) => {
           const slot = (report.slots[link.id] ?? []).find((item) => item.windowId === window.id);
-          const photo = photoFor(report, link.id, window.id);
-          if (!photo && (!slot || !slotHasValue(slot))) return '';
+          const photo = slot?.image?.base64 ? slot.image : photoFor(report, link.id, window.id);
+          if (!photo?.base64 && (!slot || !slotHasValue(slot))) return '';
           entry += 1;
           return entryBlock(entry, link.name, link.role, window.label, formatLongDate(report.date), slot, photo);
         })
@@ -88,13 +88,13 @@ export function buildReportHtml(report: Report): string {
   .work td { border-bottom: 1px solid #e6ebf0; }
   .num { width: 28px; color: #5c6b7c; }
   .when { width: 92px; white-space: nowrap; font-weight: 700; }
-  article { break-inside: avoid; page-break-inside: avoid; border: 1px solid #e1e7ee; border-left: 3px solid #102033; padding: 8px 10px 10px; margin: 0 0 10px; }
+  article { border: 1px solid #e1e7ee; border-left: 3px solid #102033; padding: 8px 10px 10px; margin: 0 0 10px; }
   .cap { margin: 0 0 6px; font-weight: 700; }
   .figures { width: auto; }
   .figures th, .figures td { font-size: 10px; padding: 2px 10px 2px 0; }
   .figures th { color: #5c6b7c; font-weight: 600; }
   .bad { color: #8a5a10; font-weight: 700; }
-  img { display: block; width: 100%; max-height: 230px; object-fit: contain; margin-top: 8px; background: #f7f8fa; }
+  img { display: block; width: 100%; height: auto; margin-top: 8px; }
   .notes { white-space: normal; }
   .closing { margin-top: 18px; border-top: 1px solid #d7dee6; padding-top: 8px; color: #5c6b7c; font-size: 10px; }
 </style></head><body>
@@ -110,7 +110,7 @@ export function buildReportHtml(report: Report): string {
   <table class="identity">
     <tr><th>Nama</th><td>${esc(report.engineerName || '—')}</td><th>Jabatan</th><td>Engineer On Site</td></tr>
     <tr><th>Tanggal</th><td>${esc(formatLongDate(report.date))}</td><th>Jam kerja</th><td>${esc(report.shiftStart)}–${esc(report.shiftEnd)} WIB</td></tr>
-    <tr><th>Lokasi</th><td colspan="3">${esc(report.location)}</td></tr>
+    <tr><th>Kontrak</th><td>${esc(report.contractCode || '—')}</td><th>Lokasi</th><td>${esc(report.location)}</td></tr>
   </table>
   <h2>1. Kegiatan Harian</h2>
   <table class="work">
@@ -132,7 +132,7 @@ function entryBlock(
   windowLabel: string,
   dateLabel: string,
   slot: TrafficSlot | undefined,
-  photo: Photo | undefined,
+  photo: SlotImage | undefined,
 ): string {
   const download = slot?.download;
   const upload = slot?.upload;

@@ -71,7 +71,7 @@ export function DetailScreen({
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title={client.name} subtitle={`${report.code} · ${formatLongDate(report.date)}`} onBack={onBack} />
+      <ScreenHeader title={client.name} subtitle={`${report.contractCode ? `${report.contractCode} · ` : ''}${report.code} · ${formatLongDate(report.date)}`} onBack={onBack} />
       <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.row}>
           <Pill label={statusLabel(report.status)} tone={report.status === 'draft' ? 'muted' : 'ok'} />

@@ -35,6 +35,29 @@ export function formatLongDate(iso: string): string {
   return `${DAYS[date.getDay()]}, ${day} ${MONTHS[month - 1]} ${year}`;
 }
 
+export function formatMonth(iso: string): string {
+  if (!isIsoDate(iso)) return iso;
+  const date = parseIso(iso);
+  return `${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+export function toIso(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+export function parseIso(iso: string): Date {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+export function addDays(iso: string, days: number): string {
+  const date = parseIso(iso);
+  date.setDate(date.getDate() + days);
+  return toIso(date);
+}
+
 export function nid(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }

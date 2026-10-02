@@ -52,7 +52,38 @@ export const bawaslu: Client = {
   ],
 };
 
-export const clients: Client[] = [bawaslu];
+export const generalSite: Client = {
+  id: 'general',
+  name: 'Klien umum',
+  site: 'Site',
+  location: 'Lokasi site',
+  codePrefix: 'EOS',
+  defaultShift: { start: '08:00', end: '17:00' },
+  windows: [],
+  links: [],
+  activityTemplate: [
+    {
+      start: '08:00',
+      end: '09:00',
+      title: 'Pengecekan site',
+      note: 'Kondisi perangkat dan lingkungan kerja.',
+    },
+    {
+      start: '09:00',
+      end: '16:00',
+      title: 'Kegiatan sesuai kontrak',
+      note: 'Pekerjaan yang diminta pelanggan.',
+    },
+    {
+      start: '16:00',
+      end: '17:00',
+      title: 'Laporan harian',
+      note: 'Menyusun log kegiatan.',
+    },
+  ],
+};
+
+export const clients: Client[] = [bawaslu, generalSite];
 
 export function findClient(id: string): Client {
   return clients.find((client) => client.id === id) ?? bawaslu;

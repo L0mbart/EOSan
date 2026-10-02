@@ -1,8 +1,19 @@
 # EOS
 
-Daily report app for Engineer On Site (EOS) at PT Jala Lintas Media. One codebase runs on Android, iOS (Expo Go), and the web. The first site is Bawaslu RI, Site Pusdatin. Later clients are added as data, not as separate apps.
+Daily operations console for Engineer On Site (EOS) at PT Jala Lintas Media. The company sells on-site engineers to client companies. One codebase runs on Android, iOS (Expo Go), and the web.
 
-## What an engineer can do
+## Operations desk
+
+After sign-in, the desk tracks:
+
+- Client companies and the report template each site uses
+- EOS personnel and which contract they are assigned to
+- Contract start and end dates
+- Daily field reports, then weekly, monthly, and yearly coverage built from the locked daily reports
+
+An admin maintains clients, personnel, contracts, and user accounts. An engineer files the daily report for a contract.
+
+## What a daily report includes
 
 - Sign in, then create, edit, lock, and reopen a daily report.
 - Record shift time, location, activities, and field notes.
@@ -36,7 +47,7 @@ The first OCR run in the browser downloads English language data. Wait until the
 
 ## Data
 
-Reports and users are stored on the device. The web build uses `localStorage`. Android and iOS use SQLite. Nothing is sent to a server. Deleting the sample report does not recreate it.
+Reports, clients, personnel, contracts, and users are stored on the device. The web build uses `localStorage`. Android and iOS use SQLite. Nothing is sent to a server. Deleting the sample report does not recreate it.
 
 ## Project layout
 

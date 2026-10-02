@@ -11,10 +11,16 @@ export type Side = {
   max: Metric;
 };
 
+export type SlotImage = {
+  base64: string;
+  mime: string;
+};
+
 export type TrafficSlot = {
   windowId: string;
   download: Side;
   upload: Side;
+  image?: SlotImage;
 };
 
 export type Activity = {
@@ -34,6 +40,8 @@ export type Photo = {
 
 export type ReportStatus = 'draft' | 'saved' | 'shared';
 
+export type Cadence = 'day' | 'week' | 'month' | 'year';
+
 export type UserRole = 'admin' | 'engineer';
 
 export type Account = {
@@ -52,10 +60,70 @@ export type SessionUser = {
   role: UserRole;
 };
 
+export type CustomerStatus = 'active' | 'inactive';
+
+export type Site = {
+  id: string;
+  name: string;
+  address: string;
+};
+
+export type Customer = {
+  id: string;
+  name: string;
+  picName: string;
+  address: string;
+  sites: Site[];
+  eosCount: number;
+  contractStart: string;
+  contractEnd: string;
+  codePrefix: string;
+  templateId: string;
+  status: CustomerStatus;
+};
+
+export type PersonnelStatus = 'active' | 'standby';
+
+export type Personnel = {
+  id: string;
+  name: string;
+  nik: string;
+  title: string;
+  phone: string;
+  contractStart: string;
+  contractEnd: string;
+  assignedFrom: string;
+  placementStart: string;
+  customerId: string;
+  siteId: string;
+  status: PersonnelStatus;
+};
+
+export type Contract = {
+  id: string;
+  code: string;
+  customerId: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  location: string;
+  personnelIds: string[];
+  notes: string;
+};
+
+export type Registry = {
+  customers: Customer[];
+  personnel: Personnel[];
+  contracts: Contract[];
+};
+
 export type Report = {
   id: string;
   code: string;
   clientId: string;
+  contractId?: string;
+  contractCode?: string;
+  personnelId?: string;
   date: string;
   engineerName: string;
   shiftStart: string;

@@ -4,7 +4,11 @@ import { nid, todayIso } from './dates';
 import { blankSide } from './metrics';
 import type { Client, Report } from './types';
 
-export function createBlankReport(client: Client, engineerName: string): Report {
+export function createBlankReport(
+  client: Client,
+  engineerName: string,
+  link?: { contractId?: string; contractCode?: string; personnelId?: string; location?: string },
+): Report {
   const date = todayIso();
   const slots: Report['slots'] = {};
   for (const link of client.links) {
@@ -18,11 +22,14 @@ export function createBlankReport(client: Client, engineerName: string): Report 
     id: nid(),
     code: codeFor(client.id, date),
     clientId: client.id,
+    contractId: link?.contractId,
+    contractCode: link?.contractCode,
+    personnelId: link?.personnelId,
     date,
     engineerName,
     shiftStart: client.defaultShift.start,
     shiftEnd: client.defaultShift.end,
-    location: client.location,
+    location: link?.location || client.location,
     activities: client.activityTemplate.map((activity) => ({ ...activity, id: nid() })),
     slots,
     notes: '',

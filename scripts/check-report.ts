@@ -34,4 +34,12 @@ for (const forbidden of ['Kembali', 'Hapus laporan', 'Ubah', 'PDF / WhatsApp']) 
   if (html.includes(forbidden)) throw new Error(`PDF HTML should not include ${forbidden}`);
 }
 
+const withGraph = sampleBawasluReport();
+const slot = withGraph.slots['inet-a-main']?.[0];
+if (!slot) throw new Error('sample slot missing');
+slot.image = { base64: 'QUJD', mime: 'image/jpeg' };
+const withImage = buildReportHtml(withGraph);
+if (!withImage.includes('src="data:image/jpeg;base64,QUJD"')) throw new Error('uploaded graph missing from its slot');
+if (!withImage.includes('06:00–09:00')) throw new Error('graph slot window missing');
+
 console.log('report checks ok');

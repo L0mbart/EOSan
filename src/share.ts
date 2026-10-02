@@ -10,47 +10,39 @@ function printHtmlDocument(html: string): Promise<void> {
     const frame = document.createElement('iframe');
     frame.setAttribute('title', 'Laporan');
     frame.style.position = 'fixed';
-    frame.style.left = '-10000px';
+    frame.style.left = '0';
     frame.style.top = '0';
-    frame.style.width = '800px';
-    frame.style.height = '1100px';
+    frame.style.width = '210mm';
+    frame.style.height = '297mm';
     frame.style.border = '0';
-    document.body.appendChild(frame);
-    const win = frame.contentWindow;
-    const doc = frame.contentDocument;
-    if (!win || !doc) {
-      frame.remove();
-      resolve();
-      return;
-    }
+    frame.style.opacity = '0.01';
+    frame.style.pointerEvents = 'none';
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
     let finished = false;
     const finish = () => {
       if (finished) return;
       finished = true;
+      URL.revokeObjectURL(url);
       frame.remove();
       resolve();
     };
-    doc.open();
-    doc.write(html);
-    doc.close();
-    win.addEventListener('afterprint', finish);
-    const images = Array.from(doc.images);
-    const pending = images.filter((image) => !image.complete);
-    const ready = pending.length === 0
-      ? Promise.resolve()
-      : Promise.all(
-          pending.map(
-            (image) =>
-              new Promise<void>((done) => {
-                image.onload = () => done();
-                image.onerror = () => done();
-              }),
-          ),
-        );
-    void ready.then(() => {
-      win.focus();
-      win.print();
-    });
+    frame.onload = () => {
+      const win = frame.contentWindow;
+      const doc = frame.contentDocument;
+      if (!win || !doc) {
+        finish();
+        return;
+      }
+      win.addEventListener('afterprint', finish);
+      const images = Array.from(doc.images);
+      void Promise.all(images.map((image) => image.decode().catch(() => undefined))).then(() => {
+        win.focus();
+        win.print();
+      });
+    };
+    document.body.appendChild(frame);
+    frame.src = url;
   });
 }
 
