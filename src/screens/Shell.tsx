@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 
 import { TextButton } from '../components';
 import { useI18n, type CopyKey } from '../i18n';
+import { FadeIn, useEase } from '../motion';
 import { colors } from '../theme';
 import type { SessionUser } from '../types';
 
@@ -31,6 +32,7 @@ export function Shell({
   children: ReactNode;
 }) {
   const { t, locale, setLocale } = useI18n();
+  const ease = useEase();
   const { width } = useWindowDimensions();
   const wide = width >= 980;
   const items = ITEMS.filter((item) => !item.admin || user.role === 'admin');
@@ -46,8 +48,8 @@ export function Shell({
           {items.map((item) => {
             const on = item.id === section;
             return (
-              <Pressable key={item.id} onPress={() => onNavigate(item.id)} style={[styles.item, on && styles.itemOn]}>
-                <Text style={[styles.itemText, on && styles.itemTextOn]}>{t(item.label)}</Text>
+              <Pressable key={item.id} onPress={() => onNavigate(item.id)} style={[styles.item, ease, on && styles.itemOn]}>
+                <Text style={[styles.itemText, ease, on && styles.itemTextOn]}>{t(item.label)}</Text>
               </Pressable>
             );
           })}
@@ -70,15 +72,18 @@ export function Shell({
           </View>
         )}
       </View>
-      <View style={styles.main}>{children}</View>
+      <View style={styles.main}>
+        <FadeIn id={section}>{children}</FadeIn>
+      </View>
     </View>
   );
 }
 
 function Lang({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  const ease = useEase();
   return (
-    <Pressable onPress={onPress} style={[styles.lang, on && styles.langOn]}>
-      <Text style={[styles.langText, on && styles.langTextOn]}>{label}</Text>
+    <Pressable onPress={onPress} style={[styles.lang, ease, on && styles.langOn]}>
+      <Text style={[styles.langText, ease, on && styles.langTextOn]}>{label}</Text>
     </Pressable>
   );
 }

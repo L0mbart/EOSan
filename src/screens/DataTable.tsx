@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 
 import { colors } from '../theme';
+import { cardLift, useEase } from '../motion';
 import type { ContractKind } from '../status';
 import { useI18n } from '../i18n';
 
@@ -14,6 +15,7 @@ export function DataTable({
   rows: { id: string; cells: ReactNode[]; onPress?: () => void; selected?: boolean }[];
   empty: string;
 }) {
+  const ease = useEase();
   const tableWidth = columns.reduce((sum, column) => sum + column.width, 0);
   return (
     <ScrollView horizontal style={styles.scroller} contentContainerStyle={styles.scroll}>
@@ -31,10 +33,10 @@ export function DataTable({
             <View key={column.label} style={[styles.cell, { width: column.width }]}>{row.cells[index]}</View>
           ));
           if (!row.onPress) {
-            return <View key={row.id} style={[styles.row, row.selected && styles.rowOn]}>{content}</View>;
+            return <View key={row.id} style={[styles.row, ease, row.selected && styles.rowOn]}>{content}</View>;
           }
           return (
-            <Pressable key={row.id} onPress={row.onPress} style={[styles.row, row.selected && styles.rowOn]}>
+            <Pressable key={row.id} onPress={row.onPress} style={[styles.row, ease, row.selected && styles.rowOn]}>
               {content}
             </Pressable>
           );
@@ -126,7 +128,7 @@ export function EngineerLines({
 const styles = StyleSheet.create({
   scroller: { width: '100%' },
   scroll: { flexGrow: 1 },
-  table: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: 10, overflow: 'hidden' },
+  table: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: 10, overflow: 'hidden', ...cardLift },
   head: { flexDirection: 'row', backgroundColor: colors.slate, borderBottomWidth: 1, borderBottomColor: colors.line },
   headCell: { paddingHorizontal: 14, paddingVertical: 12, justifyContent: 'center' },
   headText: { color: colors.muted, fontSize: 12, fontWeight: '700', lineHeight: 16 },

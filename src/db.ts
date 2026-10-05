@@ -3,8 +3,9 @@ import { Platform } from 'react-native';
 
 import { adminAccount } from './admin-account';
 import { findClient } from './clients';
+import { todayIso } from './dates';
 import { hashPassword, randomSalt } from './password';
-import { defaultRegistry, hydrateRegistry } from './registry';
+import { defaultRegistry, hydrateRegistry, recordTransfer } from './registry';
 import { sampleBawasluReport } from './seed';
 import type { Account, Contract, Customer, Personnel, Registry, Report, SessionUser, UserRole } from './types';
 
@@ -370,8 +371,13 @@ export async function deleteCustomer(id: string): Promise<void> {
 
 export async function savePersonnel(person: Personnel): Promise<void> {
   const registry = await loadRegistry();
-  const personnel = registry.personnel.filter((item) => item.id !== person.id);
-  personnel.push(person);
+  const previous = registry.personnel.find((item) => item.id === person.id);
+  const endedOn = person.siteId && person.assignedFrom && person.assignedFrom !== previous?.assignedFrom
+    ? person.assignedFrom
+    : todayIso();
+  const next = recordTransfer(previous, person, endedOn);
+  const personnel = registry.personnel.filter((item) => item.id !== next.id);
+  personnel.push(next);
   await storeRegistry(hydrateRegistry({ ...registry, personnel }));
 }
 

@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Field, PrimaryButton } from '../components';
+import { Field, PrimaryButton, Select } from '../components';
 import { saveCustomer, savePersonnel } from '../db';
 import { nid } from '../dates';
 import { useI18n } from '../i18n';
 import { contractKind } from '../status';
 import { colors } from '../theme';
+import { FadeIn, cardLift } from '../motion';
 import type { Registry, Site } from '../types';
 import { CellText, DataTable, EngineerLines, StatusBadge, TableActions } from './DataTable';
 
@@ -111,18 +112,12 @@ export function SitesScreen({
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {draft && canManage ? (
         <View style={styles.card}>
-          <Text style={styles.label}>{t('company')}</Text>
-          <View style={styles.row}>
-            {registry.customers.map((customer) => (
-              <Pressable
-                key={customer.id}
-                onPress={() => setDraft({ ...draft, customerId: customer.id })}
-                style={[styles.choice, draft.customerId === customer.id && styles.choiceOn]}
-              >
-                <Text style={[styles.choiceText, draft.customerId === customer.id && styles.choiceTextOn]}>{customer.name}</Text>
-              </Pressable>
-            ))}
-          </View>
+          <Select
+            label={t('company')}
+            value={draft.customerId}
+            options={registry.customers.map((customer) => ({ id: customer.id, label: customer.name }))}
+            onChange={(customerId) => setDraft({ ...draft, customerId })}
+          />
           <Field label={t('siteName')} value={draft.site.name} onChangeText={(name) => setDraft({ ...draft, site: { ...draft.site, name } })} />
           <Field label={t('siteAddress')} value={draft.site.address} onChangeText={(address) => setDraft({ ...draft, site: { ...draft.site, address } })} />
           <View style={styles.actions}>
@@ -163,7 +158,8 @@ export function SitesScreen({
         })}
       />
       {selectedSite ? (
-        <View style={styles.detail}>
+        <FadeIn id={selectedSite.site.id}>
+        <View style={[styles.detail, cardLift]}>
           <Text style={styles.name}>{selectedSite.site.name}</Text>
           <Text style={styles.meta}>{selectedSite.customer.name}</Text>
           <EngineerLines
@@ -172,6 +168,7 @@ export function SitesScreen({
               .map((person) => ({ id: person.id, name: person.name, phone: person.phone, status: person.status }))}
           />
         </View>
+        </FadeIn>
       ) : null}
     </ScrollView>
   );
@@ -189,10 +186,5 @@ const styles = StyleSheet.create({
   meta: { color: colors.muted, marginTop: 4, lineHeight: 18 },
   detail: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 16, marginTop: 12 },
   label: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.4, marginBottom: 8, marginTop: 4 },
-  row: { flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
-  choice: { borderWidth: 1, borderColor: colors.line, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  choiceOn: { backgroundColor: colors.navy, borderColor: colors.navy },
-  choiceText: { color: colors.ink, fontWeight: '700' },
-  choiceTextOn: { color: colors.white },
   actions: { flexDirection: 'row', marginTop: 8 },
 });

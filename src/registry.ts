@@ -1,6 +1,6 @@
 import { bawaslu } from './clients';
 import { nid } from './dates';
-import type { Contract, Customer, Personnel, Registry, Site } from './types';
+import type { Contract, Customer, Personnel, PlacementRecord, Registry, Site } from './types';
 
 export const seededSite: Site = {
   id: 'site-pusdatin',
@@ -34,6 +34,7 @@ export const seededPersonnel: Personnel = {
   placementStart: '2026-01-01',
   customerId: bawaslu.id,
   siteId: seededSite.id,
+  placements: [],
   status: 'active',
 };
 
@@ -73,8 +74,11 @@ export function normalizeCustomer(input: LooseCustomer): Customer {
 
 export function normalizePerson(input: LoosePerson, customers: Customer[], contracts: Contract[]): Personnel {
   const contract = contracts.find((item) => input.id && item.personnelIds.includes(input.id));
-  const customerId = input.customerId || contract?.customerId || '';
+  const customerId = input.customerId !== undefined && input.customerId !== null
+    ? input.customerId
+    : contract?.customerId || '';
   const customer = customers.find((item) => item.id === customerId);
+  const siteId = customerId ? (input.siteId || customer?.sites[0]?.id || '') : '';
   return {
     id: input.id || nid(),
     name: input.name || '',
@@ -83,12 +87,49 @@ export function normalizePerson(input: LoosePerson, customers: Customer[], contr
     phone: input.phone || '',
     contractStart: input.contractStart || customer?.contractStart || '',
     contractEnd: input.contractEnd || customer?.contractEnd || '',
-    assignedFrom: input.assignedFrom || '',
-    placementStart: input.placementStart || '',
+    assignedFrom: siteId ? (input.assignedFrom || '') : '',
+    placementStart: siteId ? (input.placementStart || '') : '',
     customerId,
-    siteId: input.siteId || customer?.sites[0]?.id || '',
-    status: input.status === 'standby' ? 'standby' : 'active',
+    siteId,
+    placements: asPlacements(input.placements),
+    status: siteId ? 'active' : 'standby',
   };
+}
+
+export function recordTransfer(previous: Personnel | undefined, next: Personnel, endedOn: string): Personnel {
+  const placements = previous?.placements ?? [];
+  if (!previous?.siteId || (previous.siteId === next.siteId && previous.customerId === next.customerId)) {
+    return { ...next, placements };
+  }
+  return {
+    ...next,
+    placements: [
+      ...placements,
+      {
+        id: nid(),
+        customerId: previous.customerId,
+        siteId: previous.siteId,
+        assignedFrom: previous.assignedFrom,
+        placementStart: previous.placementStart,
+        endedOn,
+      },
+    ],
+  };
+}
+
+function asPlacements(input: PlacementRecord[] | undefined): PlacementRecord[] {
+  if (!Array.isArray(input)) return [];
+  return input.flatMap((item) => {
+    if (!item?.siteId) return [];
+    return [{
+      id: item.id || nid(),
+      customerId: item.customerId || '',
+      siteId: item.siteId,
+      assignedFrom: item.assignedFrom || '',
+      placementStart: item.placementStart || '',
+      endedOn: item.endedOn || '',
+    }];
+  });
 }
 
 export function contractsFrom(customers: Customer[], personnel: Personnel[], previous: Contract[] = []): Contract[] {

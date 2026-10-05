@@ -84,6 +84,15 @@ export type Customer = {
 
 export type PersonnelStatus = 'active' | 'standby';
 
+export type PlacementRecord = {
+  id: string;
+  customerId: string;
+  siteId: string;
+  assignedFrom: string;
+  placementStart: string;
+  endedOn: string;
+};
+
 export type Personnel = {
   id: string;
   name: string;
@@ -96,6 +105,7 @@ export type Personnel = {
   placementStart: string;
   customerId: string;
   siteId: string;
+  placements: PlacementRecord[];
   status: PersonnelStatus;
 };
 

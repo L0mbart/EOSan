@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Platform, Pressable, SafeAreaView, StatusBar as RNStatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors } from './theme';
+import { cardLift, useEase } from './motion';
 
 export function ScreenHeader({
   kicker,
@@ -84,6 +85,47 @@ export function Field({
   );
 }
 
+export function Select({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { id: string; label: string }[];
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ease = useEase();
+  const current = options.find((option) => option.id === value);
+  return (
+    <View style={[styles.field, open && styles.fieldOpen]}>
+      <Text style={styles.label}>{label}</Text>
+      <Pressable onPress={() => setOpen((shown) => !shown)} style={[styles.select, ease]}>
+        <Text style={styles.selectText}>{current?.label || '—'}</Text>
+        <Text style={styles.caret}>{open ? '▴' : '▾'}</Text>
+      </Pressable>
+      {open ? (
+        <View style={styles.menu}>
+          {options.map((option) => (
+            <Pressable
+              key={option.id || 'empty'}
+              onPress={() => {
+                onChange(option.id);
+                setOpen(false);
+              }}
+              style={[styles.option, ease, option.id === value && styles.optionOn]}
+            >
+              <Text style={[styles.optionText, option.id === value && styles.optionTextOn]}>{option.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export function PrimaryButton({
   label,
   onPress,
@@ -97,12 +139,14 @@ export function PrimaryButton({
   secondary?: boolean;
   danger?: boolean;
 }) {
+  const ease = useEase();
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
       style={[
         styles.button,
+        ease,
         secondary ? styles.secondary : danger ? styles.dangerButton : styles.primary,
         disabled && styles.disabled,
       ]}
@@ -161,6 +205,38 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 16,
   },
+  fieldOpen: { zIndex: 30 },
+  select: {
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  selectText: { color: colors.ink, fontSize: 16, flex: 1 },
+  caret: { color: colors.muted, fontSize: 12 },
+  menu: {
+    position: 'absolute',
+    top: 68,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    overflow: 'hidden',
+    zIndex: 31,
+    ...cardLift,
+  },
+  option: { paddingHorizontal: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.line },
+  optionOn: { backgroundColor: colors.tealSoft },
+  optionText: { color: colors.ink, fontSize: 16 },
+  optionTextOn: { fontWeight: '700' },
   button: { borderRadius: 8, paddingVertical: 14, alignItems: 'center', flex: 1 },
   primary: { backgroundColor: colors.navy },
   secondary: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },

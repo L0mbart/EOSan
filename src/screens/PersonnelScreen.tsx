@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Field, PrimaryButton } from '../components';
+import { Field, PrimaryButton, Select } from '../components';
 import { deletePersonnel, savePersonnel } from '../db';
 import { isIsoDate, nid } from '../dates';
 import { useI18n } from '../i18n';
 import { contractKind } from '../status';
 import { colors } from '../theme';
-import type { Personnel, PersonnelStatus, Registry } from '../types';
+import { FadeIn, cardLift } from '../motion';
+import type { Personnel, Registry } from '../types';
 import { CellText, DataTable, StatusBadge, TableActions } from './DataTable';
 
-function blankPerson(registry: Registry): Personnel {
-  const customer = registry.customers[0];
+function blankPerson(): Personnel {
   return {
     id: nid(),
     name: '',
@@ -22,9 +22,10 @@ function blankPerson(registry: Registry): Personnel {
     contractEnd: '',
     assignedFrom: '',
     placementStart: '',
-    customerId: customer?.id ?? '',
-    siteId: customer?.sites[0]?.id ?? '',
-    status: 'active',
+    customerId: '',
+    siteId: '',
+    placements: [],
+    status: 'standby',
   };
 }
 
@@ -42,6 +43,8 @@ export function PersonnelScreen({
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState('');
   const sites = registry.customers.find((customer) => customer.id === draft?.customerId)?.sites ?? [];
+  const chosenClient = registry.customers.find((customer) => customer.id === draft?.customerId) ?? null;
+  const placedOnClient = registry.personnel.filter((person) => person.customerId === draft?.customerId).length;
 
   const pickedPerson = registry.personnel.find((person) => person.id === selected) ?? null;
   const picked = pickedPerson
@@ -54,7 +57,7 @@ export function PersonnelScreen({
 
   async function save() {
     if (!draft) return;
-    if (!draft.name.trim() || !/^\d{16}$/.test(draft.nik.trim()) || !draft.phone.trim() || !draft.customerId || !draft.siteId) {
+    if (!draft.name.trim() || !/^\d{16}$/.test(draft.nik.trim()) || !draft.phone.trim()) {
       setError(t('fillEngineer'));
       return;
     }
@@ -62,8 +65,35 @@ export function PersonnelScreen({
       setError(t('badDates'));
       return;
     }
+    if (draft.status === 'standby' || !draft.customerId || !draft.siteId) {
+      if (draft.status !== 'standby') {
+        setError(t('fillEngineer'));
+        return;
+      }
+      setError('');
+      await savePersonnel({
+        ...draft,
+        name: draft.name.trim(),
+        nik: draft.nik.trim(),
+        phone: draft.phone.trim(),
+        customerId: '',
+        siteId: '',
+        assignedFrom: '',
+        placementStart: '',
+        status: 'standby',
+      });
+      setDraft(null);
+      onChanged();
+      return;
+    }
     if (!isIsoDate(draft.assignedFrom) || !isIsoDate(draft.placementStart) || draft.assignedFrom > draft.placementStart) {
       setError(t('badDates'));
+      return;
+    }
+    const client = registry.customers.find((item) => item.id === draft.customerId);
+    const placed = registry.personnel.filter((person) => person.customerId === draft.customerId && person.id !== draft.id).length;
+    if (client && placed >= client.eosCount) {
+      setError(t('eosLimit').replace('{n}', String(client.eosCount)));
       return;
     }
     setError('');
@@ -72,6 +102,7 @@ export function PersonnelScreen({
       name: draft.name.trim(),
       nik: draft.nik.trim(),
       phone: draft.phone.trim(),
+      status: 'active',
     });
     setDraft(null);
     onChanged();
@@ -86,7 +117,7 @@ export function PersonnelScreen({
         </View>
         {canManage ? (
           <View style={styles.add}>
-            <PrimaryButton label={t('newEngineer')} onPress={() => { setDraft(blankPerson(registry)); setError(''); }} />
+            <PrimaryButton label={t('newEngineer')} onPress={() => { setDraft(blankPerson()); setError(''); }} />
           </View>
         ) : null}
       </View>
@@ -105,37 +136,65 @@ export function PersonnelScreen({
               <Field label={t('engineerEnd')} value={draft.contractEnd} onChangeText={(contractEnd) => setDraft({ ...draft, contractEnd })} placeholder="YYYY-MM-DD" raw />
             </View>
           </View>
-          <Text style={styles.label}>{t('company')}</Text>
-          <View style={styles.row}>
-            {registry.customers.map((customer) => (
-              <Choice
-                key={customer.id}
-                label={customer.name}
-                on={draft.customerId === customer.id}
-                onPress={() => setDraft({ ...draft, customerId: customer.id, siteId: customer.sites[0]?.id ?? '' })}
-              />
-            ))}
-          </View>
-          <Text style={styles.label}>{t('site')}</Text>
-          {sites.length === 0 ? <Text style={styles.meta}>{t('noSites')}</Text> : null}
-          <View style={styles.row}>
-            {sites.map((site) => (
-              <Choice key={site.id} label={site.name} on={draft.siteId === site.id} onPress={() => setDraft({ ...draft, siteId: site.id })} />
-            ))}
-          </View>
-          <View style={styles.pair}>
-            <View style={{ flex: 1 }}>
-              <Field label={t('assignedFrom')} value={draft.assignedFrom} onChangeText={(assignedFrom) => setDraft({ ...draft, assignedFrom })} placeholder="YYYY-MM-DD" raw />
+          <Select
+            label={t('status')}
+            value={draft.status === 'standby' ? 'standby' : 'assigned'}
+            options={[
+              { id: 'standby', label: t('standbyOption') },
+              { id: 'assigned', label: t('assignedOption') },
+            ]}
+            onChange={(status) => {
+              if (status === 'standby') {
+                setDraft({ ...draft, status: 'standby', customerId: '', siteId: '', assignedFrom: '', placementStart: '' });
+                return;
+              }
+              setDraft({ ...draft, status: 'active' });
+            }}
+          />
+          {draft.status === 'active' ? (
+            <Select
+              label={t('company')}
+              value={draft.customerId}
+              options={registry.customers.map((customer) => ({ id: customer.id, label: customer.name }))}
+              onChange={(customerId) => {
+                const customer = registry.customers.find((item) => item.id === customerId);
+                setDraft({
+                  ...draft,
+                  customerId,
+                  siteId: customer?.sites[0]?.id ?? '',
+                  assignedFrom: customerId === draft.customerId ? draft.assignedFrom : '',
+                  placementStart: customerId === draft.customerId ? draft.placementStart : '',
+                  status: 'active',
+                });
+              }}
+            />
+          ) : null}
+          {chosenClient ? <Text style={styles.meta}>{t('eosPlaced').replace('{placed}', String(placedOnClient)).replace('{n}', String(chosenClient.eosCount))}</Text> : null}
+          {draft.status === 'active' ? (
+            <Select
+              label={t('site')}
+              value={draft.siteId}
+              options={sites.map((site) => ({ id: site.id, label: site.name }))}
+              onChange={(siteId) => setDraft({
+                ...draft,
+                siteId,
+                assignedFrom: siteId === draft.siteId ? draft.assignedFrom : '',
+                placementStart: siteId === draft.siteId ? draft.placementStart : '',
+                status: 'active',
+              })}
+            />
+          ) : null}
+          {draft.siteId ? (
+            <View style={styles.pair}>
+              <View style={{ flex: 1 }}>
+                <Field label={t('assignedFrom')} value={draft.assignedFrom} onChangeText={(assignedFrom) => setDraft({ ...draft, assignedFrom })} placeholder="YYYY-MM-DD" raw />
+              </View>
+              <View style={{ width: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Field label={t('placementStart')} value={draft.placementStart} onChangeText={(placementStart) => setDraft({ ...draft, placementStart })} placeholder="YYYY-MM-DD" raw />
+              </View>
             </View>
-            <View style={{ width: 10 }} />
-            <View style={{ flex: 1 }}>
-              <Field label={t('placementStart')} value={draft.placementStart} onChangeText={(placementStart) => setDraft({ ...draft, placementStart })} placeholder="YYYY-MM-DD" raw />
-            </View>
-          </View>
-          <View style={styles.row}>
-            <Choice label={t('active')} on={draft.status === 'active'} onPress={() => setDraft({ ...draft, status: 'active' satisfies PersonnelStatus })} />
-            <Choice label={t('standby')} on={draft.status === 'standby'} onPress={() => setDraft({ ...draft, status: 'standby' })} />
-          </View>
+          ) : null}
           <View style={styles.actions}>
             <PrimaryButton label={t('save')} onPress={() => void save()} />
             <View style={{ width: 8 }} />
@@ -186,7 +245,8 @@ export function PersonnelScreen({
         })}
       />
       {picked ? (
-        <View style={styles.detail}>
+        <FadeIn id={picked.person.id}>
+        <View style={[styles.detail, cardLift]}>
           <Text style={styles.name}>{picked.person.name}</Text>
           <Text style={styles.meta}>NIK {picked.person.nik || '—'} · {picked.person.phone || '—'}</Text>
           <View style={styles.statusLine}>
@@ -200,22 +260,29 @@ export function PersonnelScreen({
           <Text style={styles.meta}>{picked.customer?.name ?? t('unassigned')} · {picked.site?.name || '—'}</Text>
           <Text style={styles.meta}>{t('assignedFrom')}: {picked.person.assignedFrom || '—'}</Text>
           <Text style={styles.meta}>{t('placementStart')}: {picked.person.placementStart || '—'}</Text>
+          {picked.person.placements.length > 0 ? (
+            <View>
+              <Text style={styles.section}>{t('placementHistory')}</Text>
+              {picked.person.placements.slice().reverse().map((item) => {
+                const company = registry.customers.find((customer) => customer.id === item.customerId);
+                const site = company?.sites.find((entry) => entry.id === item.siteId);
+                return (
+                  <Text key={item.id} style={styles.meta}>
+                    {company?.name ?? t('clientRemoved')} · {site?.name || '—'} · {item.assignedFrom || '—'} – {item.endedOn || '—'} · {t('placementStart')} {item.placementStart || '—'}
+                  </Text>
+                );
+              })}
+            </View>
+          ) : null}
           {canManage ? (
             <View style={styles.actions}>
               <PrimaryButton label={t('edit')} secondary onPress={() => { setDraft({ ...picked.person }); setError(''); }} />
             </View>
           ) : null}
         </View>
+        </FadeIn>
       ) : null}
     </ScrollView>
-  );
-}
-
-function Choice({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={[styles.choice, on && styles.choiceOn]}>
-      <Text style={[styles.choiceText, on && styles.choiceTextOn]}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -232,12 +299,6 @@ const styles = StyleSheet.create({
   statusLine: { marginTop: 10, alignSelf: 'flex-start' },
   name: { color: colors.ink, fontWeight: '700', fontSize: 16 },
   meta: { color: colors.muted, marginTop: 4, lineHeight: 18 },
-  label: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.4, marginBottom: 8 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   pair: { flexDirection: 'row' },
-  choice: { borderWidth: 1, borderColor: colors.line, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  choiceOn: { backgroundColor: colors.navy, borderColor: colors.navy },
-  choiceText: { color: colors.ink, fontWeight: '700' },
-  choiceTextOn: { color: colors.white },
   actions: { flexDirection: 'row', marginTop: 8 },
 });

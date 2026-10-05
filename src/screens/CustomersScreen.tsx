@@ -5,6 +5,7 @@ import { Field, PrimaryButton } from '../components';
 import { deleteCustomer, saveCustomer } from '../db';
 import { isIsoDate, nid } from '../dates';
 import { useI18n } from '../i18n';
+import { FadeIn, cardLift } from '../motion';
 import { contractKind } from '../status';
 import { colors } from '../theme';
 import type { Customer, CustomerStatus, Registry, Site } from '../types';
@@ -88,6 +89,9 @@ export function CustomersScreen({
 
   const selectedCustomer = registry.customers.find((customer) => customer.id === selected) ?? null;
   const selectedPeople = registry.personnel.filter((person) => person.customerId === selected);
+  const unplaced = selectedPeople.filter((person) => !selectedCustomer?.sites.some((site) => site.id === person.siteId));
+  const onSite = selectedCustomer ? selectedPeople.length - unplaced.length : 0;
+  const needed = selectedCustomer ? Math.max(0, selectedCustomer.eosCount - onSite) : 0;
 
   async function remove(id: string) {
     setError('');
@@ -188,20 +192,59 @@ export function CustomersScreen({
         })}
       />
       {selectedCustomer ? (
-        <View style={styles.detail}>
+        <FadeIn id={selectedCustomer.id}>
+        <View style={[styles.detail, cardLift]}>
           <Text style={styles.name}>{selectedCustomer.name}</Text>
           <Text style={styles.meta}>{t('site')}: {selectedCustomer.sites.length}</Text>
           <Text style={styles.meta}>{t('eosCount')}: {selectedCustomer.eosCount}</Text>
-          <Text style={styles.personnelLabel}>{t('detailPersonnel')}</Text>
-          <EngineerLines
-            people={selectedPeople.map((person) => ({
-              id: person.id,
-              name: person.name,
-              phone: person.phone,
-              site: selectedCustomer.sites.find((site) => site.id === person.siteId)?.name ?? '',
-              status: person.status,
-            }))}
-          />
+          <Text style={styles.meta}>{t('eosOnSite')}: {onSite}</Text>
+          {needed > 0 ? <Text style={styles.need}>{t('eosNeeded').replace('{n}', String(needed))}</Text> : null}
+          {selectedCustomer.sites.map((site) => {
+            const placed = selectedPeople.filter((person) => person.siteId === site.id);
+            const former = registry.personnel.flatMap((person) =>
+              person.placements
+                .filter((item) => item.customerId === selectedCustomer.id && item.siteId === site.id)
+                .map((item) => ({ person, item })),
+            );
+            return (
+              <View key={site.id} style={styles.siteBlock}>
+                <Text style={styles.personnelLabel}>{site.name}</Text>
+                {site.address ? <Text style={styles.meta}>{site.address}</Text> : null}
+                <Text style={styles.meta}>{t('contractEnd')}: {selectedCustomer.contractEnd || '—'}</Text>
+                <EngineerLines
+                  people={placed.map((person) => ({
+                    id: person.id,
+                    name: person.name,
+                    phone: person.phone,
+                    status: person.status,
+                  }))}
+                />
+                {former.length > 0 ? (
+                  <View>
+                    <Text style={styles.personnelLabel}>{t('formerPersonnel')}</Text>
+                    {former.map(({ person, item }) => (
+                      <Text key={item.id} style={styles.meta}>
+                        {person.name} · {item.assignedFrom || '—'} – {item.endedOn || '—'}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+          {unplaced.length > 0 ? (
+            <View style={styles.siteBlock}>
+              <Text style={styles.personnelLabel}>{t('unassigned')}</Text>
+              <EngineerLines
+                people={unplaced.map((person) => ({
+                  id: person.id,
+                  name: person.name,
+                  phone: person.phone,
+                  status: person.status,
+                }))}
+              />
+            </View>
+          ) : null}
           {canManage ? (
             <View style={styles.actions}>
               <PrimaryButton label={t('edit')} secondary onPress={() => open(selectedCustomer)} />
@@ -210,6 +253,7 @@ export function CustomersScreen({
             </View>
           ) : null}
         </View>
+        </FadeIn>
       ) : null}
     </ScrollView>
   );
@@ -227,6 +271,8 @@ const styles = StyleSheet.create({
   body: { padding: 20, paddingBottom: 40, width: '100%' },
   detail: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 16, marginTop: 12 },
   personnelLabel: { color: colors.ink, fontWeight: '700', marginTop: 12 },
+  need: { color: colors.amber, fontWeight: '700', marginTop: 8, lineHeight: 20 },
+  siteBlock: { marginTop: 8, paddingTop: 4 },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 12 },
   title: { color: colors.ink, fontSize: 28, fontWeight: '700' },
   lead: { color: colors.muted, marginTop: 6, lineHeight: 20 },

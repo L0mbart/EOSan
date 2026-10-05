@@ -2,9 +2,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { todayIso } from '../dates';
 import { useI18n } from '../i18n';
-import { contractPhase, reportsForContract } from '../ops';
+import { contractPhase } from '../ops';
 import { colors } from '../theme';
 import type { Registry, Report } from '../types';
+import { cardLift } from '../motion';
 import { PeriodBoard } from './PeriodBoard';
 
 export function DashboardScreen({
@@ -28,9 +29,17 @@ export function DashboardScreen({
     const soon = `${limit.getFullYear()}-${String(limit.getMonth() + 1).padStart(2, '0')}-${String(limit.getDate()).padStart(2, '0')}`;
     return end <= soon;
   });
-  const onDuty = new Set(active.flatMap((contract) => contract.personnelIds));
-  const filedToday = reports.filter((report) => report.date === today && report.status !== 'draft').length;
-  const missingToday = active.filter((contract) => !reportsForContract(reports, contract).some((report) => report.date === today && report.status !== 'draft')).length;
+  const placed = registry.personnel.filter((person) => {
+    const customer = registry.customers.find((item) => item.id === person.customerId);
+    return Boolean(customer?.sites.some((site) => site.id === person.siteId));
+  });
+  const filedIds = new Set(
+    reports
+      .filter((report) => report.date === today && report.status !== 'draft' && report.personnelId && placed.some((person) => person.id === report.personnelId))
+      .map((report) => report.personnelId),
+  );
+  const filedToday = filedIds.size;
+  const filingPercent = placed.length === 0 ? 0 : Math.round((filedToday / placed.length) * 100);
 
   return (
     <ScrollView contentContainerStyle={styles.body}>
@@ -48,9 +57,10 @@ export function DashboardScreen({
       <View style={styles.stats}>
         <Stat value={String(registry.customers.filter((item) => item.status === 'active').length)} label={t('statClients')} />
         <Stat value={String(active.length)} label={t('statContracts')} />
-        <Stat value={String(onDuty.size)} label={t('statPersonnel')} />
-        <Stat value={String(filedToday)} label={t('statReportsToday')} />
-        <Stat value={String(missingToday)} label={t('statMissingToday')} />
+        <Stat value={String(registry.personnel.length)} label={t('statEosTotal')} />
+        <Stat value={String(registry.personnel.length - placed.length)} label={t('statEosStandby')} />
+        <Stat value={String(placed.length)} label={t('statEosAssigned')} />
+        <Stat value={placed.length === 0 ? '—' : `${filedToday}/${placed.length} · ${filingPercent}%`} label={t('statReportsToday')} />
         <Stat value={String(ending.length)} label={t('statEnding')} />
       </View>
       <Text style={styles.section}>{t('periodSection')}</Text>
@@ -69,7 +79,7 @@ function Lang({ label, on, onPress }: { label: string; on: boolean; onPress: () 
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <View style={styles.stat}>
+    <View style={[styles.stat, cardLift]}>
       <Text style={styles.value}>{value}</Text>
       <Text style={styles.label}>{label}</Text>
     </View>
